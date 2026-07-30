@@ -1,0 +1,8 @@
+# Tested with Python 3.10.
+torch>=1.12          # scatter_reduce
+torchvision          # match your torch build
+timm>=0.9,<2.0       # ToastBlock resolves the drop_path/Mlp naming differences across versions
+numpy
+termcolor            # coloured console logging
+matplotlib           # only for the --plot flag of the experiments/ scripts
+pytest               # only for tests/

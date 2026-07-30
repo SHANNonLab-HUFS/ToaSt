@@ -1,0 +1,1871 @@
+{
+  "_meta": {
+    "description": "Per-model Token Channel Selection schedules and SCWP sparsities, keyed by target GFLOPs. Load with toast.config.load_tcs_config.",
+    "dataset": "ImageNet-1k",
+    "resolution": 224,
+    "measurement": "H100, batch size 128; latency and throughput as measured, speedup relative to the dense baseline",
+    "flops_convention": "multiply-accumulates, matching ToMe/DiffRate; see toast/flops.py",
+    "fc1": "per-block fraction of fc1 input channels dropped; index 0 = first block",
+    "fc2": "per-block fraction of fc2 input channels (MLP hidden units) dropped",
+    "reported": "the paper's measured numbers for this schedule",
+    "computed_gflops": "FLOPs derived from this schedule by toast/flops.py"
+  },
+  "models": {
+    "deit_tiny_patch16_224": {
+      "arch": "vit",
+      "aliases": [
+        "deit_tiny",
+        "vit_deit_tiny_patch16_224"
+      ],
+      "num_blocks": 12,
+      "embed_dim": 192,
+      "num_heads": 3,
+      "supported": true,
+      "baseline": {
+        "top1": 72.2,
+        "top5": 91.1,
+        "gflops": 1.3,
+        "latency_ms": 61.22,
+        "throughput_img_s": 2090.95,
+        "computed_gflops": 1.254
+      },
+      "references": [
+        {
+          "method": "ToMe",
+          "top1": 71.25,
+          "top5": 90.74,
+          "gflops": 0.7,
+          "latency_ms": 51.54,
+          "throughput_img_s": 2484.59,
+          "speedup": 1.19
+        },
+        {
+          "method": "DiffRate",
+          "top1": 71.78,
+          "top5": 90.87,
+          "gflops": 0.9,
+          "latency_ms": 52.84,
+          "throughput_img_s": 2422.54,
+          "speedup": 1.16
+        },
+        {
+          "method": "DiffRate",
+          "top1": 71.67,
+          "top5": 90.78,
+          "gflops": 0.8,
+          "latency_ms": 56.75,
+          "throughput_img_s": 2255.7,
+          "speedup": 1.08
+        }
+      ],
+      "configs": {
+        "0.9": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5
+          ],
+          "computed_gflops": 0.801,
+          "reported": {
+            "top1": 69.93,
+            "top5": 89.67,
+            "gflops": 0.9,
+            "latency_ms": 36.89,
+            "throughput_img_s": 3469.48,
+            "speedup": 1.66
+          }
+        },
+        "0.8": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.9
+          ],
+          "computed_gflops": 0.781,
+          "reported": {
+            "top1": 74.3,
+            "top5": 92.26,
+            "gflops": 0.8,
+            "latency_ms": 29.32,
+            "throughput_img_s": 4364.95,
+            "speedup": 2.09
+          }
+        },
+        "0.76": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            0.6,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 0.714,
+          "reported": {
+            "top1": 74.25,
+            "top5": 92.65,
+            "gflops": 0.76,
+            "latency_ms": 30.12,
+            "throughput_img_s": 4249.68,
+            "speedup": 2.03
+          }
+        }
+      }
+    },
+    "deit_small_patch16_224": {
+      "arch": "vit",
+      "aliases": [
+        "deit_small",
+        "vit_deit_small_patch16_224"
+      ],
+      "num_blocks": 12,
+      "embed_dim": 384,
+      "num_heads": 6,
+      "supported": true,
+      "baseline": {
+        "top1": 79.82,
+        "top5": 94.95,
+        "gflops": 4.6,
+        "latency_ms": 55.33,
+        "throughput_img_s": 2313.2,
+        "computed_gflops": 4.599
+      },
+      "references": [
+        {
+          "method": "ToMe",
+          "top1": 79.35,
+          "top5": 94.65,
+          "gflops": 2.7,
+          "latency_ms": 44.24,
+          "throughput_img_s": 2737.05,
+          "speedup": 1.18
+        },
+        {
+          "method": "DiffRate",
+          "top1": 79.56,
+          "top5": 94.8,
+          "gflops": 2.9,
+          "latency_ms": 45.58,
+          "throughput_img_s": 2808.05,
+          "speedup": 1.21
+        },
+        {
+          "method": "DiffRate",
+          "top1": 79.38,
+          "top5": 94.65,
+          "gflops": 2.7,
+          "latency_ms": 39.27,
+          "throughput_img_s": 3259.82,
+          "speedup": 1.41
+        },
+        {
+          "method": "DiffRate",
+          "top1": 79.09,
+          "top5": 94.5,
+          "gflops": 2.5,
+          "latency_ms": 39.3,
+          "throughput_img_s": 3256.77,
+          "speedup": 1.41
+        }
+      ],
+      "configs": {
+        "2.9": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 2.9,
+          "reported": {
+            "top1": 80.77,
+            "top5": 95.29,
+            "gflops": 2.9,
+            "latency_ms": 28.32,
+            "throughput_img_s": 4519.28,
+            "speedup": 1.95
+          }
+        },
+        "2.7": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.6,
+            0.7,
+            0.8,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 2.656,
+          "reported": {
+            "top1": 83.89,
+            "top5": 97.13,
+            "gflops": 2.7,
+            "latency_ms": 27.47,
+            "throughput_img_s": 4659.27,
+            "speedup": 2.01
+          }
+        },
+        "2.5": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            0.5
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.8,
+            0.8,
+            0.9,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 2.528,
+          "reported": {
+            "top1": 83.4,
+            "top5": 96.97,
+            "gflops": 2.5,
+            "latency_ms": 26.76,
+            "throughput_img_s": 4783.32,
+            "speedup": 2.07
+          }
+        }
+      }
+    },
+    "deit_base_patch16_224": {
+      "arch": "vit",
+      "aliases": [
+        "deit_base",
+        "vit_deit_base_patch16_224"
+      ],
+      "num_blocks": 12,
+      "embed_dim": 768,
+      "num_heads": 12,
+      "supported": true,
+      "baseline": {
+        "top1": 81.8,
+        "top5": 95.6,
+        "gflops": 17.6,
+        "latency_ms": 113.99,
+        "throughput_img_s": 1122.89,
+        "computed_gflops": 17.564
+      },
+      "references": [
+        {
+          "method": "ToMe",
+          "top1": 80.59,
+          "top5": 94.83,
+          "gflops": 11.5,
+          "latency_ms": 78.6,
+          "throughput_img_s": 1628.4,
+          "speedup": 1.45
+        },
+        {
+          "method": "DiffRate",
+          "top1": 81.01,
+          "top5": 95.02,
+          "gflops": 10.4,
+          "latency_ms": 75.48,
+          "throughput_img_s": 1659.79,
+          "speedup": 1.48
+        },
+        {
+          "method": "DiffRate",
+          "top1": 81.51,
+          "top5": 95.4,
+          "gflops": 11.5,
+          "latency_ms": 82.37,
+          "throughput_img_s": 1553.88,
+          "speedup": 1.38
+        }
+      ],
+      "configs": {
+        "11.5": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.7,
+            0.9
+          ],
+          "computed_gflops": 11.454,
+          "reported": {
+            "top1": 82.25,
+            "top5": 96.07,
+            "gflops": 11.5,
+            "latency_ms": 78.54,
+            "throughput_img_s": 1620.86,
+            "speedup": 1.44
+          }
+        },
+        "10.7": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            0.8,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 10.617,
+          "reported": {
+            "top1": 84.82,
+            "top5": 97.1,
+            "gflops": 10.7,
+            "latency_ms": 75.7,
+            "throughput_img_s": 1690.93,
+            "speedup": 1.51
+          }
+        },
+        "10.4": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            0.8,
+            0.8,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 10.385,
+          "reported": {
+            "top1": 82.87,
+            "top5": 96.29,
+            "gflops": 10.4,
+            "latency_ms": 74.96,
+            "throughput_img_s": 1707.53,
+            "speedup": 1.52
+          }
+        },
+        "10.27": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            0.8,
+            0.8,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 10.245,
+          "reported": {
+            "top1": 82.02,
+            "top5": 95.57,
+            "gflops": 10.27,
+            "latency_ms": 74.83,
+            "throughput_img_s": 1710.59,
+            "speedup": 1.52
+          }
+        }
+      }
+    },
+    "vit_base_patch16_224.mae": {
+      "arch": "vit",
+      "aliases": [
+        "vitmae_base",
+        "vit_base_patch16_mae"
+      ],
+      "num_blocks": 12,
+      "embed_dim": 768,
+      "num_heads": 12,
+      "supported": true,
+      "baseline": {
+        "top1": 83.75,
+        "top5": 96.54,
+        "gflops": 17.6,
+        "latency_ms": 112.27,
+        "throughput_img_s": 1140.16,
+        "computed_gflops": 17.564
+      },
+      "references": [
+        {
+          "method": "ToMe (r=16)",
+          "top1": 81.09,
+          "top5": 95.61,
+          "gflops": 8.8,
+          "latency_ms": 62.0,
+          "throughput_img_s": 2064.49,
+          "speedup": 1.81
+        },
+        {
+          "method": "ToMe (r=13)",
+          "top1": 81.87,
+          "top5": 96.02,
+          "gflops": 10.4,
+          "latency_ms": 71.78,
+          "throughput_img_s": 1783.33,
+          "speedup": 1.56
+        },
+        {
+          "method": "DiffRate",
+          "top1": 82.9,
+          "top5": 96.14,
+          "gflops": 11.5,
+          "latency_ms": 82.43,
+          "throughput_img_s": 1552.75,
+          "speedup": 1.36
+        }
+      ],
+      "configs": {
+        "11.5": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.7,
+            0.9
+          ],
+          "computed_gflops": 11.454,
+          "reported": {
+            "top1": 83.44,
+            "top5": 95.49,
+            "gflops": 11.5,
+            "latency_ms": 78.8,
+            "throughput_img_s": 1624.28,
+            "speedup": 1.42
+          }
+        },
+        "11.0": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            0.6,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 10.989,
+          "reported": {
+            "top1": 84.13,
+            "top5": 96.39,
+            "gflops": 11.0,
+            "epochs": 297,
+            "latency_ms": 75.62,
+            "throughput_img_s": 1692.61,
+            "speedup": 1.48
+          }
+        }
+      }
+    },
+    "vit_large_patch16_224.mae": {
+      "arch": "vit",
+      "aliases": [
+        "vitmae_large",
+        "vit_large_patch16_mae"
+      ],
+      "num_blocks": 24,
+      "embed_dim": 1024,
+      "num_heads": 16,
+      "supported": true,
+      "baseline": {
+        "top1": 85.96,
+        "top5": 97.55,
+        "gflops": 61.6,
+        "latency_ms": 366.73,
+        "throughput_img_s": 349.03,
+        "computed_gflops": 61.555
+      },
+      "references": [
+        {
+          "method": "ToMe (r=8)",
+          "top1": 83.44,
+          "top5": 97.0,
+          "gflops": 31.0,
+          "latency_ms": 200.37,
+          "throughput_img_s": 638.82,
+          "speedup": 1.83
+        },
+        {
+          "method": "ToMe (r=6)",
+          "top1": 84.58,
+          "top5": 97.12,
+          "gflops": 38.5,
+          "latency_ms": 244.65,
+          "throughput_img_s": 523.2,
+          "speedup": 1.5
+        },
+        {
+          "method": "DiffRate",
+          "top1": 85.66,
+          "top5": 97.44,
+          "gflops": 42.3,
+          "latency_ms": 269.65,
+          "throughput_img_s": 474.69,
+          "speedup": 1.36
+        },
+        {
+          "method": "DiffRate",
+          "top1": 85.38,
+          "top5": 97.39,
+          "gflops": 38.5,
+          "latency_ms": 249.39,
+          "throughput_img_s": 513.26,
+          "speedup": 1.47
+        }
+      ],
+      "configs": {
+        "42.3": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.6
+          ],
+          "computed_gflops": 42.18,
+          "reported": {
+            "top1": 81.86,
+            "top5": 95.84,
+            "gflops": 42.3,
+            "latency_ms": 262.85,
+            "throughput_img_s": 486.96,
+            "speedup": 1.4
+          }
+        },
+        "38.5": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.6,
+            0.7,
+            0.9,
+            0.9,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 38.379,
+          "reported": {
+            "top1": 88.94,
+            "top5": 97.95,
+            "gflops": 38.5,
+            "epochs": 139,
+            "latency_ms": 242.88,
+            "throughput_img_s": 527.01,
+            "speedup": 1.51
+          }
+        }
+      }
+    },
+    "vit_huge_patch14_224.mae": {
+      "arch": "vit",
+      "aliases": [
+        "vitmae_huge",
+        "vit_huge_patch14_mae"
+      ],
+      "num_blocks": 32,
+      "embed_dim": 1280,
+      "num_heads": 16,
+      "supported": true,
+      "baseline": {
+        "top1": 86.88,
+        "top5": 98.07,
+        "gflops": 167.4,
+        "latency_ms": 987.02,
+        "throughput_img_s": 129.68,
+        "computed_gflops": 167.296
+      },
+      "references": [
+        {
+          "method": "ToMe (r=7)",
+          "top1": 85.31,
+          "top5": 97.67,
+          "gflops": 92.9,
+          "latency_ms": 564.04,
+          "throughput_img_s": 226.94,
+          "speedup": 1.75
+        },
+        {
+          "method": "ToMe (r=5)",
+          "top1": 86.28,
+          "top5": 97.88,
+          "gflops": 113.9,
+          "latency_ms": 688.44,
+          "throughput_img_s": 185.93,
+          "speedup": 1.43
+        },
+        {
+          "method": "DiffRate",
+          "top1": 86.65,
+          "top5": 97.88,
+          "gflops": 103.4,
+          "latency_ms": 631.02,
+          "throughput_img_s": 202.85,
+          "speedup": 1.56
+        }
+      ],
+      "configs": {
+        "103.4": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.2
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.8,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 103.292,
+          "reported": {
+            "top1": 90.03,
+            "top5": 98.77,
+            "gflops": 103.4,
+            "epochs": 15,
+            "latency_ms": 631.11,
+            "throughput_img_s": 202.82,
+            "speedup": 1.56
+          }
+        },
+        "101.4": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 101.439,
+          "reported": {
+            "top1": 88.52,
+            "top5": 98.29,
+            "gflops": 101.4,
+            "epochs": 15,
+            "latency_ms": 620.73,
+            "throughput_img_s": 206.21,
+            "speedup": 1.59
+          }
+        },
+        "100.4": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.7,
+            0.8,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9
+          ],
+          "computed_gflops": 100.429,
+          "reported": {
+            "top1": 86.92,
+            "top5": 97.68,
+            "gflops": 100.4,
+            "epochs": 15,
+            "latency_ms": 622.45,
+            "throughput_img_s": 205.64,
+            "speedup": 1.59
+          }
+        }
+      }
+    },
+    "swin_tiny_patch4_window7_224": {
+      "arch": "swin",
+      "aliases": [
+        "swin_tiny"
+      ],
+      "depths": [
+        2,
+        2,
+        6,
+        2
+      ],
+      "num_blocks": 12,
+      "supported": false,
+      "unsupported_reason": "apply_toast patches timm VisionTransformer blocks; Swin's SwinTransformerBlock is not handled in this release. These schedules are recorded so the paper's Swin rows are documented.",
+      "baseline": {
+        "top1": 81.2,
+        "top5": 95.5,
+        "gflops": 4.5,
+        "latency_ms": 49.02,
+        "throughput_img_s": 2610.94
+      },
+      "references": [],
+      "configs": {
+        "3.1": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1_by_stage": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.3
+            ]
+          ],
+          "fc2_by_stage": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.5
+            ],
+            [
+              0.9,
+              0.9
+            ]
+          ],
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            0.9,
+            0.9
+          ],
+          "reported": {
+            "top1": 81.76,
+            "top5": 95.7,
+            "gflops": 3.1,
+            "latency_ms": 45.58,
+            "throughput_img_s": 2705.76,
+            "speedup": 1.04
+          }
+        }
+      }
+    },
+    "swin_small_patch4_window7_224": {
+      "arch": "swin",
+      "aliases": [
+        "swin_small"
+      ],
+      "depths": [
+        2,
+        2,
+        18,
+        2
+      ],
+      "num_blocks": 24,
+      "supported": false,
+      "unsupported_reason": "apply_toast patches timm VisionTransformer blocks; Swin's SwinTransformerBlock is not handled in this release. These schedules are recorded so the paper's Swin rows are documented.",
+      "baseline": {
+        "top1": 83.2,
+        "top5": 96.2,
+        "gflops": 8.7,
+        "latency_ms": 83.42,
+        "throughput_img_s": 1534.41
+      },
+      "references": [
+        {
+          "method": "STViT-R",
+          "top1": 82.6,
+          "top5": 96.07,
+          "gflops": 5.8,
+          "latency_ms": 77.74,
+          "throughput_img_s": 1646.58,
+          "speedup": 1.07
+        }
+      ],
+      "configs": {
+        "5.4": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1_by_stage": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.3
+            ]
+          ],
+          "fc2_by_stage": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.9,
+              0.9,
+              0.9,
+              0.9,
+              0.9
+            ],
+            [
+              0.9,
+              0.9
+            ]
+          ],
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9
+          ],
+          "reported": {
+            "top1": 84.65,
+            "top5": 96.8,
+            "gflops": 5.4,
+            "latency_ms": 67.03,
+            "throughput_img_s": 1909.46,
+            "speedup": 1.24
+          }
+        }
+      }
+    },
+    "swin_base_patch4_window7_224": {
+      "arch": "swin",
+      "aliases": [
+        "swin_base"
+      ],
+      "depths": [
+        2,
+        2,
+        18,
+        2
+      ],
+      "num_blocks": 24,
+      "supported": false,
+      "unsupported_reason": "apply_toast patches timm VisionTransformer blocks; Swin's SwinTransformerBlock is not handled in this release. These schedules are recorded so the paper's Swin rows are documented.",
+      "baseline": {
+        "top1": 83.5,
+        "top5": 96.5,
+        "gflops": 15.4,
+        "latency_ms": 116.35,
+        "throughput_img_s": 1100.1
+      },
+      "references": [
+        {
+          "method": "STViT-R",
+          "top1": 83.2,
+          "top5": 96.4,
+          "gflops": 10.3,
+          "latency_ms": 106.12,
+          "throughput_img_s": 1206.23,
+          "speedup": 1.1
+        }
+      ],
+      "configs": {
+        "8.8": {
+          "head_sparsity": 90.0,
+          "importance": "gm",
+          "coupling": "coupled",
+          "fc1_by_stage": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.3
+            ]
+          ],
+          "fc2_by_stage": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.9,
+              0.9,
+              0.9,
+              0.9,
+              0.9,
+              0.9,
+              0.9,
+              0.9,
+              0.9
+            ],
+            [
+              0.9,
+              0.9
+            ]
+          ],
+          "fc1": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.3
+          ],
+          "fc2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9,
+            0.9
+          ],
+          "reported": {
+            "top1": 85.21,
+            "top5": 96.5,
+            "gflops": 8.8,
+            "latency_ms": 90.87,
+            "throughput_img_s": 1408.6,
+            "speedup": 1.3
+          }
+        }
+      }
+    }
+  },
+  "detection": {
+    "framework": "Cascade Mask R-CNN on COCO",
+    "note": "Swin backbones; recorded for reference, not runnable from this release.",
+    "entries": [
+      {
+        "backbone": "swin_small_patch4_window7_224",
+        "depths": [
+          2,
+          2,
+          18,
+          2
+        ],
+        "params": "107M",
+        "flops": "838G",
+        "baseline": {
+          "box_mAP": 51.9,
+          "mask_mAP": 45.0
+        },
+        "fc1_by_stage": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.3
+          ]
+        ],
+        "fc2_by_stage": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.9
+          ],
+          [
+            0.9,
+            0.9
+          ]
+        ],
+        "reported": {
+          "box_mAP": 52.2,
+          "mask_mAP": 44.7
+        },
+        "token_keep": 0.6,
+        "comment": "token keep 60% + token-channel 90% on the last 3 layers"
+      },
+      {
+        "backbone": "swin_base_patch4_window7_224",
+        "depths": [
+          2,
+          2,
+          18,
+          2
+        ],
+        "params": "145M",
+        "flops": "982G",
+        "baseline": {
+          "box_mAP": 51.9,
+          "mask_mAP": 45.0
+        },
+        "fc1_by_stage": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.3
+          ]
+        ],
+        "fc2_by_stage": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.9,
+            0.9
+          ],
+          [
+            0.9,
+            0.9
+          ]
+        ],
+        "reported": {
+          "box_mAP": 52.2,
+          "mask_mAP": 44.7
+        },
+        "token_keep": 0.6,
+        "comment": "token keep 60% + token-channel 90% on the last 4 layers"
+      },
+      {
+        "backbone": "swin_base_patch4_window7_224",
+        "depths": [
+          2,
+          2,
+          18,
+          2
+        ],
+        "params": "145M",
+        "flops": "982G",
+        "baseline": {
+          "box_mAP": 51.9,
+          "mask_mAP": 45.0
+        },
+        "reported": {
+          "box_mAP": 51.9,
+          "mask_mAP": 44.7
+        },
+        "token_keep": 0.6,
+        "comment": "token keep 60% + token-channel 90% on the last 6 layers; per-layer fc1/fc2 vectors were not recorded"
+      }
+    ]
+  }
+}

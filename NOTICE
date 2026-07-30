@@ -1,0 +1,33 @@
+ToaST
+Copyright 2026 TODO: ToaST authors / institution
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+--------------------------------------------------------------------------------
+Third-party code
+--------------------------------------------------------------------------------
+
+This repository contains code derived from the following projects. Their copyright
+notices are retained in the files concerned.
+
+DeiT — https://github.com/facebookresearch/deit
+    Copyright (c) 2015-present, Facebook, Inc. Licensed under Apache License 2.0.
+    `main.py`, `engine.py`, `datasets.py`, `samplers.py` and `utils.py` follow DeiT's
+    training scaffolding: argument parsing, the epoch loop, dataset and transform
+    construction, the repeated-augmentation sampler, and the distributed/metric helpers.
+
+pytorch-image-models (timm) — https://github.com/huggingface/pytorch-image-models
+    Copyright 2019 Ross Wightman. Licensed under Apache License 2.0.
+    Used as a dependency. `toast/patch.py` subclasses timm's `VisionTransformer` `Block`
+    and `Attention`, and `toast/dense.py` reimplements their forward passes on re-packed
+    weights.
+
+DiffRate — https://github.com/OpenGVLab/DiffRate
+    This work began as a fork of DiffRate (ICCV 2023). DiffRate's differentiable
+    compression-rate search, token merging and pruning are not part of ToaST and have been
+    removed from this release; refer to the upstream repository to reproduce DiffRate as a
+    baseline. What remains of that lineage is the DeiT-derived scaffolding above.
+
+Token Merging (ToMe) — https://github.com/facebookresearch/ToMe
+    DiffRate's token-processing utilities derived from ToMe. None of that code is used
+    here; the attribution is recorded because this repository's history passes through it.
