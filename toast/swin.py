@@ -1,38 +1,3 @@
-"""Token Channel Selection for Swin backbones.
-
-:func:`toast.patch.apply_toast` dispatches here when it is handed a timm `SwinTransformer`.
-The mechanism is the one :mod:`toast.token_channel` describes -- score the feed-forward
-channels from the activations, compute only the top fraction, per forward pass -- with two
-differences that come from the architecture.
-
-**Block indexing.** Swin nests its blocks in stages, `model.layers[i].blocks[j]`. The ratio
-vectors are indexed by the *global* block index, counting straight through the stages
-(:mod:`toast.arch`), so Swin-T takes a twelve-element vector exactly as DeiT does, and block 0
-is the first block of the first stage.
-
-**Scoring.** There is no class token, so neither the class-token term of the ViT score nor the
-attention weighting it applies to patches has a direct counterpart. A ViT weights each patch by
-the class token's attention *to* it, which is one row of the map; a window map has no
-distinguished row. Two substitutes are implemented:
-
-* ``attn_weighting=False`` (default) -- the score is the token magnitude alone. This is what
-  the schedules in `configs/tcs.json` were measured with, so it is the default.
-* ``attn_weighting=True`` -- each token is weighted by the attention it *receives*, averaged
-  over the queries of its window and over heads (:func:`window_attention_received`). This is
-  the closest analogue of the ViT weighting, and needs the attention map, so it also swaps in
-  :class:`SwinToastWindowAttention` to keep the map instead of letting a fused kernel discard
-  it.
-
-Note that the *other* natural substitute -- each token's average attention over its window,
-i.e. averaging the map along the key axis -- is not a substitute at all: softmax normalises
-along exactly that axis, so the average is ``1 / window_area`` for every token alike, and a
-constant cannot reorder anything. Weighting by it selects precisely the channels magnitude
-alone selects. That is why the two options above are the ones offered.
-
-Everything else follows :mod:`toast.patch`: the masked formulation used here zeroes rejected
-channels and keeps shapes static, and :mod:`toast.dense` re-packs the same selection into
-physically smaller matmuls for latency.
-"""
 
 from typing import Optional, Sequence, Tuple
 
@@ -56,20 +21,12 @@ __all__ = [
     "window_attention_received",
 ]
 
-# Ten times the ViT ratio, because Swin's later stages have far fewer tokens to average over --
-# 49 in the last stage of a 224px model, where 2 % would be a single token. This is the ratio
-# the paper's Swin rows were measured with.
+
 DEFAULT_SWIN_SAMPLE_RATIO = 0.2
 
 
 class SwinToastWindowAttention(WindowAttention):
-    """Window attention that keeps its attention map on ``last_attn``.
 
-    Only installed when ``attn_weighting`` is on, and deliberately does not use fused/SDPA
-    attention: the map is then an output, not an implementation detail we can let the kernel
-    discard. The map is stored head-averaged and detached -- it is read to rank channels, and
-    ranking is not differentiable, so nothing needs the graph.
-    """
 
     last_attn: Optional[torch.Tensor] = None
 
@@ -107,23 +64,7 @@ def window_attention_received(
     H: int,
     W: int,
 ) -> torch.Tensor:
-    """Per-token attention received, mapped back to image order.
 
-    Args:
-        attn: head-averaged window map, ``(num_windows*B, N, N)``, as
-            :class:`SwinToastWindowAttention` stores it.
-        window_size, shift_size: the block's, both ``(h, w)``.
-        H, W: the block's token grid, *before* padding.
-
-    Returns ``(B, H * W)``, averaging to 1 so the weights are comparable to the unweighted
-    score. Averaging the map over its queries gives what each token receives; averaging over
-    its keys would give ``1 / window_area`` for every token, since softmax already normalises
-    that axis.
-
-    The inverse of timm's `_attn` -- window reverse, crop the padding, undo the cyclic shift --
-    is applied in that order, because a token's weight has to land back on the token it came
-    from. Skipping this step is not a rounding error: window order is not image order.
-    """
     weights = attn.mean(dim=-2)  # (num_windows*B, N) -- mean over queries
     weights = weights * float(attn.shape[-1])  # mean 1 rather than 1 / window_area
 
