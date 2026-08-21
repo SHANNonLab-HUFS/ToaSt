@@ -15,6 +15,11 @@ masked path normalises over all `C` channels (the rejected ones contributing zer
 path normalises over the kept channels only, and the two have different mean and variance.
 Report accuracy from the masked path (`toast.patch`) and latency from this one; the tests
 check that the two agree to a loose tolerance rather than exactly.
+
+Swin takes the same route through :class:`DenseSwinAttention` and :class:`DenseSwinBlock`. The
+window handling is not reimplemented: the dense attention keeps `WindowAttention`'s ``(x,
+mask)`` signature and its relative position bias, so timm's own `_attn` still does the
+shifting, padding and masking around it.
 """
 
 from typing import Dict, List, Optional, Sequence
@@ -23,9 +28,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .arch import is_swin, iter_blocks, num_blocks, part
+from .swin import (
+    DEFAULT_SWIN_SAMPLE_RATIO,
+    SwinToastBlock,
+    swin_channel_importance,
+    swin_kept_channels,
+)
 from .token_channel import DEFAULT_CLS_WEIGHT, DEFAULT_SAMPLE_RATIO, channel_importance
 
-__all__ = ["extract_dense_heads", "DenseCoupledAttention", "DenseToastBlock", "densify"]
+__all__ = [
+    "extract_dense_heads",
+    "DenseCoupledAttention",
+    "DenseToastBlock",
+    "DenseSwinAttention",
+    "DenseSwinBlock",
+    "densify",
+]
 
 
 def extract_dense_heads(model: nn.Module, skip_first_block: bool = True) -> Dict[int, Dict]:
@@ -40,7 +59,7 @@ def extract_dense_heads(model: nn.Module, skip_first_block: bool = True) -> Dict
     """
     dense: Dict[int, Dict] = {}
 
-    for block_idx, block in enumerate(model.blocks):
+    for block_idx, block in iter_blocks(model):
         if skip_first_block and block_idx == 0:
             continue
 
@@ -263,25 +282,217 @@ class DenseToastBlock(nn.Module):
         return gated + self.drop_path(h)
 
 
+class DenseSwinAttention(nn.Module):
+    """Window attention on re-packed weights, with a smaller per-head dimension.
+
+    A drop-in for timm's `WindowAttention`: same ``(x, mask)`` signature, same relative
+    position bias, so the block's own `_attn` -- window partitioning, shifting, padding -- is
+    reused untouched. Set `keep_attn` to expose the map on `last_attn`, which the block needs
+    when its score weights tokens by the attention they receive.
+    """
+
+    keep_attn: bool = False
+    last_attn: Optional[torch.Tensor] = None
+
+    def __init__(self, attn: nn.Module, info: Dict):
+        super().__init__()
+        self.num_heads = info["num_heads"]
+        self.embed_dim = info["embed_dim"]
+        # The original scale, not one derived from the smaller head dimension: SCWP removes
+        # dimensions from the dot product, it does not rescale the ones that remain, and the
+        # masked model this is re-packed from uses the original scale too.
+        self.scale = attn.scale
+        self.attn_drop = attn.attn_drop
+        self.proj_drop = attn.proj_drop
+
+        qk_dims = {d for d in info["qk_head_dims"] if d > 0}
+        v_dims = {d for d in info["v_head_dims"] if d > 0}
+        if len(qk_dims) != 1 or len(v_dims) != 1:
+            raise ValueError(
+                "dense attention needs a uniform per-head budget; got "
+                f"qk={sorted(info['qk_head_dims'])} v={sorted(info['v_head_dims'])}"
+            )
+        self.qk_head_dim = qk_dims.pop()
+        self.vo_head_dim = v_dims.pop()
+        self.total_qk = self.num_heads * self.qk_head_dim
+        self.total_vo = self.num_heads * self.vo_head_dim
+
+        q = torch.cat([h for h in info["q_heads"] if h is not None], dim=0)
+        k = torch.cat([h for h in info["k_heads"] if h is not None], dim=0)
+        v = torch.cat([h for h in info["v_heads"] if h is not None], dim=0)
+        self.register_buffer("qkv_weight", torch.cat([q, k, v], dim=0))
+        self.register_buffer("o_weight", torch.cat([h for h in info["o_heads"] if h is not None], dim=1))
+
+        if attn.qkv.bias is not None:
+            qb, kb, vb = attn.qkv.bias.split(self.embed_dim)
+            qk_idx, v_idx = info["qk_indices"], info["v_indices"]
+            self.register_buffer("qkv_bias", torch.cat([qb[qk_idx], kb[qk_idx], vb[v_idx]], dim=0))
+        else:
+            self.qkv_bias = None
+
+        self.proj_bias = attn.proj.bias
+
+        # Position bias is untouched by SCWP -- it is indexed by token pair, not by channel.
+        window_size = attn.window_size
+        self.window_area = int(getattr(attn, "window_area", window_size[0] * window_size[1]))
+        self.relative_position_bias_table = attn.relative_position_bias_table
+        self.register_buffer("relative_position_index", attn.relative_position_index)
+
+    def _rel_pos_bias(self) -> torch.Tensor:
+        bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
+        bias = bias.view(self.window_area, self.window_area, -1)
+        return bias.permute(2, 0, 1).contiguous().unsqueeze(0)
+
+    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        B_, N, _ = x.shape
+        qkv = F.linear(x, self.qkv_weight, self.qkv_bias)
+
+        q = qkv[:, :, : self.total_qk].reshape(B_, N, self.num_heads, self.qk_head_dim).transpose(1, 2)
+        k = (
+            qkv[:, :, self.total_qk : 2 * self.total_qk]
+            .reshape(B_, N, self.num_heads, self.qk_head_dim)
+            .transpose(1, 2)
+        )
+        v = qkv[:, :, 2 * self.total_qk :].reshape(B_, N, self.num_heads, self.vo_head_dim).transpose(1, 2)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn + self._rel_pos_bias()
+        if mask is not None:
+            num_win = mask.shape[0]
+            attn = attn.view(-1, num_win, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
+            attn = attn.view(-1, self.num_heads, N, N)
+        attn = attn.softmax(dim=-1)
+        if self.keep_attn:
+            self.last_attn = attn.detach().mean(dim=1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B_, N, self.total_vo)
+        x = F.linear(x, self.o_weight, self.proj_bias)
+        return self.proj_drop(x)
+
+    def pop_attn(self) -> Optional[torch.Tensor]:
+        """Return the stored map and clear it, so a stale one can never be reused."""
+        attn, self.last_attn = self.last_attn, None
+        return attn
+
+
+class DenseSwinBlock(SwinToastBlock):
+    """Swin block combining dense window attention with dense (narrowing) selection.
+
+    The masked counterpart is :class:`toast.swin.SwinToastBlock`; the difference is the same
+    one :class:`DenseToastBlock` makes for ViT -- each selection slices the weight matrix
+    instead of zeroing an input, and `norm2` therefore normalises over the kept channels only.
+    Installed by :func:`densify`, which swaps the class in place so timm's `_attn` keeps
+    handling the windows.
+    """
+
+    def _kept(self, tokens: torch.Tensor, ratio: float, token_weights) -> torch.Tensor:
+        importance = swin_channel_importance(
+            tokens, token_weights, self.sample_ratio, self.tcs_generator
+        )
+        return swin_kept_channels(importance, ratio)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, H, W, C = x.shape
+        x = x + self.drop_path1(self._attn(self.norm1(x)))
+        x = x.reshape(B, -1, C)
+
+        token_weights = self._token_weights(H, W)
+        mlp = self.mlp
+        fc1_ratio = self.fc1_ratio
+        kept: Optional[torch.Tensor] = None
+
+        if fc1_ratio == 0.0:
+            h = mlp.fc1(self.norm2(x))
+        else:
+            kept = self._kept(x, fc1_ratio, token_weights)
+            # LayerNorm over the kept channels only -- see the module docstring.
+            h = F.layer_norm(
+                x[:, :, kept],
+                (kept.numel(),),
+                weight=self.norm2.weight.index_select(0, kept),
+                bias=self.norm2.bias.index_select(0, kept),
+                eps=self.norm2.eps,
+            )
+            h = F.linear(h, mlp.fc1.weight.index_select(1, kept), mlp.fc1.bias)
+
+        h = part(mlp, "drop1", "drop")(mlp.act(h))
+        h = part(mlp, "norm")(h)
+
+        fc2_ratio = self.fc2_ratio
+        if fc2_ratio == 0.0:
+            h = mlp.fc2(h)
+        else:
+            kept_fc2 = self._kept(h, fc2_ratio, token_weights)
+            h = F.linear(h[:, :, kept_fc2], mlp.fc2.weight.index_select(1, kept_fc2), mlp.fc2.bias)
+
+        h = part(mlp, "drop2", "drop")(h)
+
+        if kept is None:
+            x = x + self.drop_path2(h)
+        else:
+            # Match SwinToastBlock: channels dropped before fc1 leave the residual too.
+            gated = torch.zeros_like(x)
+            gated.index_copy_(2, kept, x.index_select(2, kept))
+            x = gated + self.drop_path2(h)
+
+        return x.reshape(B, H, W, C)
+
+
 def densify(
     model: nn.Module,
     fc1_prune_ratios: Optional[Sequence[float]] = None,
     fc2_prune_ratios: Optional[Sequence[float]] = None,
     skip_first_block: bool = True,
-    **tcs_kwargs,
+    cls_weight: float = DEFAULT_CLS_WEIGHT,
+    sample_ratio: Optional[float] = None,
+    generator: Optional[torch.Generator] = None,
+    swin_attn_weighting: bool = False,
 ) -> nn.Module:
     """Return `model` with its pruned blocks replaced by dense equivalents, in place.
 
     Deep-copy first if you still need the masked model:
     ``densify(copy.deepcopy(model), ...)``.
+
+    `cls_weight` applies to the ViT path only and `swin_attn_weighting` to the Swin path only;
+    `sample_ratio` defaults per architecture, as in :func:`toast.patch.apply_toast`. Pass the
+    same scoring options the masked model was built with, or the two will not select the same
+    channels.
     """
-    n = len(model.blocks)
+    n = num_blocks(model)
     fc1 = list(fc1_prune_ratios) if fc1_prune_ratios is not None else [0.0] * n
     fc2 = list(fc2_prune_ratios) if fc2_prune_ratios is not None else [0.0] * n
 
     dense_info = extract_dense_heads(model, skip_first_block)
+
+    if is_swin(model):
+        # Swapped in place rather than rebuilt: timm's `_attn` carries the window shifting,
+        # padding and mask, and re-packing changes none of that.
+        blocks = dict(iter_blocks(model))
+        for block_idx, info in dense_info.items():
+            block = blocks[block_idx]
+            block.attn = DenseSwinAttention(block.attn, info)
+            block.__class__ = DenseSwinBlock
+            block.configure_tcs(
+                block_idx,
+                fc1,
+                fc2,
+                DEFAULT_SWIN_SAMPLE_RATIO if sample_ratio is None else sample_ratio,
+                generator,
+                swin_attn_weighting,
+            )
+            block.attn.keep_attn = swin_attn_weighting and block.selects_channels
+        return model
+
     for block_idx, info in dense_info.items():
         model.blocks[block_idx] = DenseToastBlock(
-            model.blocks[block_idx], info, block_idx, fc1, fc2, **tcs_kwargs
+            model.blocks[block_idx],
+            info,
+            block_idx,
+            fc1,
+            fc2,
+            cls_weight=cls_weight,
+            sample_ratio=DEFAULT_SAMPLE_RATIO if sample_ratio is None else sample_ratio,
+            generator=generator,
         )
     return model

@@ -16,6 +16,7 @@ import os
 import numpy as np
 
 from experiments.common import add_common_args, build_toast_model, build_val_loader, eval_args, run_eval
+from toast import num_blocks as count_blocks
 
 
 def _rescale(values, target_avg):
@@ -96,7 +97,7 @@ def main():
     num_classes = 100 if args.data_set == "CIFAR" else 1000
 
     probe, masks = build_toast_model(args.model, num_classes, head_sparsity=args.head_sparsity)
-    num_blocks = len(probe.blocks)
+    num_blocks = count_blocks(probe)
     baseline = run_eval(probe, loader, masks, args.device)
     print(f"\nbaseline (no FFN pruning) Acc@1 {baseline['acc1']:.3f}")
     del probe

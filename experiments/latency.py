@@ -26,7 +26,8 @@ from experiments.common import (
     resolve_saved_ratios,
     run_eval,
 )
-from toast import densify
+from toast import blocks_of, densify
+from toast import num_blocks as count_blocks
 
 
 def parse_args():
@@ -68,13 +69,23 @@ def main():
     if masks is None:
         raise SystemExit("checkpoint has no masks; nothing to re-pack")
 
-    n = len(masked.blocks)
+    n = count_blocks(masked)
     fc1 = resolve_saved_ratios(saved, "fc1_prune_ratio", n)
     fc2 = resolve_saved_ratios(saved, "fc2_prune_ratio", n)
 
-    dense = densify(copy.deepcopy(masked), fc1_prune_ratios=fc1, fc2_prune_ratios=fc2)
+    # Score the dense model exactly as the masked one is scored, or the two will not select
+    # the same channels. The settings are read off a patched block rather than re-derived.
+    probe = blocks_of(masked)[-1]
+    dense = densify(
+        copy.deepcopy(masked),
+        fc1_prune_ratios=fc1,
+        fc2_prune_ratios=fc2,
+        cls_weight=getattr(probe, "cls_weight", 2.0),
+        sample_ratio=getattr(probe, "sample_ratio", None),
+        swin_attn_weighting=getattr(probe, "attn_weighting", False),
+    )
 
-    block = dense.blocks[len(dense.blocks) // 2]
+    block = blocks_of(dense)[n // 2]
     print(
         f"\nre-packed per-head dims: qk={block.attn.qk_head_dim} vo={block.attn.vo_head_dim} "
         f"(dense qkv weight {tuple(block.attn.qkv_weight.shape)})"

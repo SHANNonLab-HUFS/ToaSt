@@ -15,6 +15,7 @@ import json
 import os
 
 from experiments.common import add_common_args, build_toast_model, build_val_loader, eval_args, run_eval
+from toast import num_blocks as count_blocks
 
 
 def parse_args():
@@ -56,7 +57,7 @@ def main():
     baseline_model, masks = build_toast_model(
         args.model, num_classes, head_sparsity=args.head_sparsity
     )
-    num_blocks = len(baseline_model.blocks)
+    num_blocks = count_blocks(baseline_model)
     baseline = run_eval(baseline_model, loader, masks, args.device)
     print(f"\nbaseline Acc@1 {baseline['acc1']:.3f}")
     del baseline_model

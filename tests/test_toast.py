@@ -29,8 +29,10 @@ from toast import (  # noqa: E402
     apply_toast,
     attention_layers,
     channel_importance,
+    blocks_of,
     densify,
     extract_dense_heads,
+    iter_blocks,
     reapply_masks,
     select_channels_dense,
     select_channels_masked,
@@ -147,7 +149,7 @@ def test_all_scores_produce_valid_masks(score):
 
 
 def test_pruner_rejects_a_model_without_blocks():
-    with pytest.raises(AttributeError, match="no `.blocks`"):
+    with pytest.raises(AttributeError, match=r"no `\.blocks`"):
         StructuredCoupledPruner(torch.nn.Linear(4, 4), head_sparsity=50.0, verbose=False)
 
 
@@ -358,18 +360,18 @@ def test_flops_reject_a_wrong_length_ratio_list():
 
 
 def test_every_config_entry_matches_its_recorded_flops():
-    """Keeps each schedule and its recorded FLOPs consistent."""
-    from toast import load_tcs_config, spec_from_model, vit_flops
+    """Keeps each schedule and its recorded FLOPs consistent, on either architecture."""
+    from toast import load_tcs_config, spec_for_model, toast_flops
 
     config = load_tcs_config()
     for model_name, entry in config["models"].items():
         if not entry.get("supported", True):
             continue
-        spec = spec_from_model(
+        spec = spec_for_model(
             timm.create_model(model_name, pretrained=False), num_classes=1000
         )
         for target, schedule in entry["configs"].items():
-            computed = vit_flops(
+            computed = toast_flops(
                 spec,
                 head_sparsity=schedule["head_sparsity"],
                 fc1_prune_ratios=schedule["fc1"],
@@ -416,16 +418,27 @@ def test_resolve_config_reports_available_budgets():
         resolve_config("resnet50", 2.9)
 
 
-def test_swin_configs_are_recorded_but_refuse_to_resolve():
-    """Swin schedules are recorded; patching SwinTransformerBlock is not in this release."""
-    from toast import load_tcs_config, resolve_config
+def test_swin_configs_resolve_and_report_their_architecture():
+    from toast import resolve_config
 
-    config = load_tcs_config()
-    swin = config["models"]["swin_small_patch4_window7_224"]
-    assert swin["supported"] is False
-    assert sum(len(stage) for stage in swin["configs"]["5.4"]["fc1_by_stage"]) == swin["num_blocks"]
-    with pytest.raises(NotImplementedError, match="not runnable"):
-        resolve_config("swin_small", 5.4)
+    config = resolve_config("swin_small", 5.4)
+    assert config.arch == "swin"
+    assert len(config.fc1_prune_ratios) == 24
+    assert config.head_sparsity == 90.0
+
+
+@pytest.mark.parametrize(
+    "model_name", ["swin_tiny_patch4_window7_224", "swin_small_patch4_window7_224"]
+)
+def test_swin_stage_split_concatenates_to_the_flat_vector(model_name):
+    """`*_by_stage` is the same schedule, grouped for readability -- it must stay in step."""
+    from toast import load_tcs_config
+
+    entry = load_tcs_config()["models"][model_name]
+    for target, schedule in entry["configs"].items():
+        for key in ("fc1", "fc2"):
+            flat = [r for stage in schedule[f"{key}_by_stage"] for r in stage]
+            assert flat == schedule[key], f"{model_name} @ {target}G: {key}_by_stage != {key}"
 
 
 # ------------------------------------------------------------------- training/eval contract
@@ -504,3 +517,232 @@ def test_state_dict_snapshot_after_reprojection_is_sparse():
     state = model.state_dict()
     for name, mask in zip(names, pruner.masks):
         assert torch.count_nonzero(state[f"{name}.weight"][mask]) == 0
+
+
+# ----------------------------------------------------------------------------------- Swin
+
+
+SWIN = "swin_tiny_patch4_window7_224"  # depths (2, 2, 6, 2) -- 12 blocks, like DeiT-T
+SWIN_FC1 = [0.0] * 11 + [0.3]
+SWIN_FC2 = [0.0] * 9 + [0.5, 0.9, 0.9]
+
+
+def build_swin(seed=0, **toast_kwargs):
+    torch.manual_seed(seed)
+    model = timm.create_model(SWIN, pretrained=False)
+    apply_toast(model, **toast_kwargs)
+    return model
+
+
+def test_swin_blocks_are_indexed_globally_across_stages():
+    """A Swin schedule is one flat vector, so stage nesting must not disturb the indexing."""
+    from toast import blocks_of, num_blocks, stage_depths
+
+    model = build_swin(fc1_prune_ratios=SWIN_FC1, fc2_prune_ratios=SWIN_FC2)
+    assert stage_depths(model) == [2, 2, 6, 2]
+    assert num_blocks(model) == 12
+
+    blocks = blocks_of(model)
+    assert [b.block_index for b in blocks] == list(range(12))
+    # Global index 9 is the sixth block of stage 2, and carries that entry's ratio.
+    assert model.layers[2].blocks[5] is blocks[9]
+    assert blocks[9].fc2_ratio == 0.5
+    assert blocks[11].fc1_ratio == 0.3
+
+
+def test_swin_tcs_is_a_no_op_at_zero_and_finite_otherwise():
+    torch.manual_seed(3)
+    x = torch.randn(2, 3, 224, 224)
+
+    plain = timm.create_model(SWIN, pretrained=False).eval()
+    patched = timm.create_model(SWIN, pretrained=False)
+    patched.load_state_dict(plain.state_dict())
+    apply_toast(patched)
+    patched.eval()
+    with torch.no_grad():
+        assert torch.allclose(plain(x), patched(x), atol=1e-6)
+
+    compressed = build_swin(fc1_prune_ratios=SWIN_FC1, fc2_prune_ratios=SWIN_FC2).eval()
+    with torch.no_grad():
+        y = compressed(x)
+    assert y.shape == (2, 1000) and torch.isfinite(y).all()
+
+
+def test_swin_scwp_keeps_the_uniform_per_head_budget_in_every_stage():
+    """Stages differ in width and head count, so the budget has to be computed per block."""
+    model = build_swin()
+    pruner = StructuredCoupledPruner(model, head_sparsity=75.0, verbose=False)
+
+    # Two masks per block, block 0 left dense.
+    assert len(pruner.masks) == 2 * 11
+    assert pruner.sparsity == pytest.approx(0.75, abs=1e-9)
+
+    for idx, qkv, proj in attention_layers(model):
+        num_heads = dict(iter_blocks(model))[idx].attn.num_heads
+        embed_dim = qkv.weight.shape[1]
+        head_dim = embed_dim // num_heads
+        kept = (qkv.weight.data[:embed_dim] != 0).any(dim=1)
+        per_head = [int(kept[h * head_dim : (h + 1) * head_dim].sum()) for h in range(num_heads)]
+        assert set(per_head) == {int(head_dim * 0.25)}, f"block {idx}: {per_head}"
+
+
+def test_swin_importance_is_reproducible_with_a_generator():
+    from toast import swin_channel_importance
+
+    tokens = torch.randn(2, 49, 96)
+    kwargs = dict(sample_ratio=0.2)
+    first = swin_channel_importance(tokens, generator=torch.Generator().manual_seed(7), **kwargs)
+    again = swin_channel_importance(tokens, generator=torch.Generator().manual_seed(7), **kwargs)
+    assert torch.equal(first, again)
+    assert swin_channel_importance(tokens, sample_ratio=1.0).shape == (96,)
+
+    # A per-token weight reorders the score; a constant one cannot.
+    weights = torch.rand(2, 49) + 0.5
+    unweighted = swin_channel_importance(tokens, sample_ratio=1.0)
+    weighted = swin_channel_importance(tokens, weights, sample_ratio=1.0)
+    constant = swin_channel_importance(tokens, torch.full((2, 49), 3.0), sample_ratio=1.0)
+    assert not torch.allclose(weighted / weighted.sum(), unweighted / unweighted.sum())
+    assert torch.allclose(constant, unweighted * 3.0, atol=1e-6)
+
+
+def test_swin_dense_repacking_matches_the_masked_model():
+    """Without fc1 pruning both paths see the same channels, so they must agree tightly."""
+    model = build_swin(fc2_prune_ratios=SWIN_FC2)
+    StructuredCoupledPruner(model, head_sparsity=90.0, verbose=False)
+    model.eval()
+    dense = densify(copy.deepcopy(model), fc2_prune_ratios=SWIN_FC2).eval()
+
+    x = torch.randn(2, 3, 224, 224)
+    torch.manual_seed(5)
+    with torch.no_grad():
+        y_masked = model(x)
+    torch.manual_seed(5)
+    with torch.no_grad():
+        y_dense = dense(x)
+    assert torch.allclose(y_masked, y_dense, rtol=1e-4, atol=1e-4)
+
+    attn = dense.layers[3].blocks[1].attn
+    head_dim = 768 // attn.num_heads  # stage 3 is 8x the first stage's 96 channels
+    assert attn.qk_head_dim == int(head_dim * 0.1)
+    assert attn.qkv_weight.shape[0] == 3 * attn.num_heads * attn.qk_head_dim
+
+
+def test_swin_dense_tracks_masked_when_fc1_is_pruned():
+    model = build_swin(fc1_prune_ratios=SWIN_FC1, fc2_prune_ratios=SWIN_FC2)
+    StructuredCoupledPruner(model, head_sparsity=90.0, verbose=False)
+    model.eval()
+    dense = densify(
+        copy.deepcopy(model), fc1_prune_ratios=SWIN_FC1, fc2_prune_ratios=SWIN_FC2
+    ).eval()
+
+    x = torch.randn(2, 3, 224, 224)
+    with torch.no_grad():
+        assert torch.isfinite(dense(x)).all()
+        assert torch.isfinite(model(x)).all()
+
+
+def test_swin_attention_weighting_is_not_the_key_axis_average():
+    """The key-axis average of a softmax map is 1/N; only the query axis carries signal."""
+    from toast import window_attention_received
+
+    torch.manual_seed(11)
+    windows, heads, N = 4, 3, 49
+    attn = torch.randn(windows, heads, N, N).softmax(dim=-1).mean(dim=1)
+
+    # What the score does use: attention received, i.e. the query-axis average.
+    received = window_attention_received(attn, (7, 7), (0, 0), 14, 14)
+    assert received.shape == (1, 196)
+    assert received.mean() == pytest.approx(1.0, abs=1e-5)  # normalised to mean 1
+    assert received.std() > 1e-3, "attention received must vary between tokens"
+
+    # What it does not: the key-axis average, which softmax pins to 1/N everywhere.
+    assert torch.allclose(attn.mean(dim=-1), torch.full((windows, N), 1.0 / N), atol=1e-6)
+
+
+def test_swin_attention_weights_land_on_the_token_they_came_from():
+    """Window order is not image order; check the inverse mapping against a brute-force one."""
+    from timm.models.swin_transformer import window_partition
+    from toast import window_attention_received
+
+    H = W = 14
+    window_size, shift_size = (7, 7), (3, 3)
+    windows, N = (H // 7) * (W // 7), 49
+
+    torch.manual_seed(12)
+    attn = torch.randn(windows, N, N).softmax(dim=-1)
+    got = window_attention_received(attn, window_size, shift_size, H, W)
+
+    # Brute force: push each token's image index through the same shift-and-partition timm
+    # applies, then place each window token's weight at the index it came from.
+    index = torch.arange(H * W, dtype=torch.float32).view(1, H, W, 1)
+    rolled = torch.roll(index, shifts=(-shift_size[0], -shift_size[1]), dims=(1, 2))
+    origin = window_partition(rolled, window_size).view(-1, N).long()
+
+    weights = attn.mean(dim=-2) * N
+    expected = torch.zeros(1, H * W)
+    expected[0, origin.reshape(-1)] = weights.reshape(-1)
+    assert torch.allclose(got, expected, atol=1e-6)
+
+
+def test_swin_attention_weighting_changes_the_selected_channels():
+    model = build_swin(
+        fc1_prune_ratios=SWIN_FC1, fc2_prune_ratios=SWIN_FC2, swin_attn_weighting=True
+    )
+    weighted = blocks_of(model)
+    assert all(b.attn_weighting for b in weighted)
+    # Installed only where channels are actually selected -- elsewhere the map is not needed.
+    assert type(weighted[11].attn).__name__ == "SwinToastWindowAttention"
+    assert type(weighted[0].attn).__name__ == "WindowAttention"
+
+    torch.manual_seed(4)
+    x = torch.randn(2, 3, 224, 224)
+    model.eval()
+    with torch.no_grad():
+        y = model(x)
+    assert torch.isfinite(y).all()
+    # The map must not survive a forward pass, or the next one would score against stale data.
+    assert weighted[11].attn.last_attn is None
+
+    plain = build_swin(fc1_prune_ratios=SWIN_FC1, fc2_prune_ratios=SWIN_FC2).eval()
+    plain.load_state_dict(model.state_dict())
+    with torch.no_grad():
+        assert not torch.allclose(plain(x), y), "weighting should change what is selected"
+
+
+def test_swin_attention_weighting_is_off_by_default():
+    """configs/tcs.json was measured without it, so the default has to stay magnitude-only."""
+    model = build_swin(fc1_prune_ratios=SWIN_FC1, fc2_prune_ratios=SWIN_FC2)
+    assert not any(b.attn_weighting for b in blocks_of(model))
+    assert all(type(b.attn).__name__ == "WindowAttention" for b in blocks_of(model))
+
+
+def test_swin_flops_match_the_published_baselines():
+    from toast import spec_for_model, toast_flops
+
+    for model_name, expected in [
+        ("swin_tiny_patch4_window7_224", 4.5),
+        ("swin_small_patch4_window7_224", 8.7),
+        ("swin_base_patch4_window7_224", 15.4),
+    ]:
+        spec = spec_for_model(timm.create_model(model_name, pretrained=False), num_classes=1000)
+        assert toast_flops(spec).gflops == pytest.approx(expected, abs=0.05)
+
+
+def test_swin_flops_scale_per_stage():
+    from toast import spec_for_model, toast_flops
+
+    spec = spec_for_model(timm.create_model(SWIN, pretrained=False), num_classes=1000)
+    assert spec.depths == [2, 2, 6, 2]
+    assert spec.stage_of(0) == 0 and spec.stage_of(9) == 2 and spec.stage_of(11) == 3
+
+    dense = toast_flops(spec)
+    pruned = toast_flops(spec, head_sparsity=75.0, fc1_prune_ratios=0.5, fc2_prune_ratios=0.5)
+    keep = int(spec.head_dim(0) * 0.25) / spec.head_dim(0)
+    assert pruned.mhsa[0] == dense.mhsa[0]  # block 0 stays dense
+    assert pruned.mhsa[1] == pytest.approx(dense.mhsa[1] * keep)
+    assert pruned.ffn[5] == pytest.approx(dense.ffn[5] * 0.5)
+    # Patch merging belongs to neither stage's blocks and is left alone.
+    assert pruned.downsample == dense.downsample > 0
+
+    # Every stage's FFN costs the same: half the tokens' width, twice the channels.
+    assert len(set(round(f, 3) for f in dense.ffn)) == 1

@@ -14,7 +14,7 @@ import sys
 
 import timm
 
-from toast import load_tcs_config, spec_from_model, vit_flops
+from toast import load_tcs_config, spec_for_model, toast_flops
 
 
 def parse_args():
@@ -30,7 +30,7 @@ def parse_args():
 
 
 def spec_for(model_name, num_classes=1000):
-    return spec_from_model(
+    return spec_for_model(
         timm.create_model(model_name, pretrained=False, num_classes=num_classes),
         num_classes=num_classes,
     )
@@ -39,7 +39,7 @@ def spec_for(model_name, num_classes=1000):
 def rows_for(model_name, entry):
     """One row per config entry, plus the baseline and reference rows."""
     spec = spec_for(model_name)
-    baseline_gflops = vit_flops(spec).gflops
+    baseline_gflops = toast_flops(spec).gflops
     rows = [{
         "method": "baseline (dense)",
         "gflops": entry["baseline"].get("gflops"),
@@ -61,7 +61,7 @@ def rows_for(model_name, entry):
         })
     for target, spec_entry in sorted(entry["configs"].items(), key=lambda kv: -float(kv[0])):
         reported = spec_entry.get("reported", {})
-        computed = vit_flops(
+        computed = toast_flops(
             spec,
             head_sparsity=spec_entry["head_sparsity"],
             fc1_prune_ratios=spec_entry["fc1"],
@@ -98,7 +98,8 @@ def main():
             print(f"skipping unknown model {model_name}", file=sys.stderr)
             continue
         if not entry.get("supported", True):
-            print(f"\n## {model_name}  (recorded only: {entry['unsupported_reason']})")
+            reason = entry.get("unsupported_reason", "unsupported architecture")
+            print(f"\n## {model_name}  (recorded only: {reason})")
             continue
 
         rows = rows_for(model_name, entry)

@@ -30,6 +30,7 @@ class TcsConfig:
     head_sparsity: float
     fc1_prune_ratios: List[float]
     fc2_prune_ratios: List[float]
+    arch: str = "vit"
     importance: str = "gm"
     coupling: str = "coupled"
     computed_gflops: Optional[float] = None
@@ -37,7 +38,7 @@ class TcsConfig:
 
     def summary(self) -> str:
         lines = [
-            f"{self.model} @ {self.target_flops}G  "
+            f"{self.model} ({self.arch}) @ {self.target_flops}G  "
             f"head_sparsity={self.head_sparsity:g}%  importance={self.importance}  "
             f"coupling={self.coupling}",
             f"  fc1 {[round(r, 2) for r in self.fc1_prune_ratios]}",
@@ -116,6 +117,7 @@ def resolve_config(
         head_sparsity=float(spec["head_sparsity"]),
         fc1_prune_ratios=[float(r) for r in spec["fc1"]],
         fc2_prune_ratios=[float(r) for r in spec["fc2"]],
+        arch=entry.get("arch", "vit"),
         importance=spec.get("importance", "gm"),
         coupling=spec.get("coupling", "coupled"),
         computed_gflops=spec.get("computed_gflops"),

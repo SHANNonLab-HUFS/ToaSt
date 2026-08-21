@@ -19,7 +19,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import utils  # noqa: E402
 from datasets import build_dataset  # noqa: E402
 from engine import evaluate  # noqa: E402
-from toast import StructuredCoupledPruner, apply_toast, attention_layers, reapply_masks  # noqa: E402
+from toast import (  # noqa: E402
+    StructuredCoupledPruner,
+    apply_toast,
+    attention_layers,
+    num_blocks,
+    reapply_masks,
+)
 from utils import MultiEpochsDataLoader  # noqa: E402
 
 # Earlier spellings of the same arguments, kept so older checkpoints stay readable.
@@ -153,7 +159,7 @@ def build_toast_model(
         model_name, pretrained=pretrained, num_classes=num_classes,
         drop_rate=0.0, drop_path_rate=0.0,
     )
-    n = len(model.blocks)
+    n = num_blocks(model)
     apply_toast(
         model,
         fc1_prune_ratios=list(fc1_ratios) if fc1_ratios is not None else [0.0] * n,
@@ -193,14 +199,16 @@ def load_toast_checkpoint(
     model = create_model(
         model_name, pretrained=False, num_classes=num_classes, drop_rate=0.0, drop_path_rate=0.0
     )
-    n = len(model.blocks)
+    n = num_blocks(model)
 
     apply_toast(
         model,
         fc1_prune_ratios=resolve_saved_ratios(saved, "fc1_prune_ratio", n),
         fc2_prune_ratios=resolve_saved_ratios(saved, "fc2_prune_ratio", n),
         cls_weight=_get(saved, "cls_weight", 2.0),
-        sample_ratio=_get(saved, "sample_ratio", 0.02),
+        # None lets apply_toast pick the default for this architecture.
+        sample_ratio=_get(saved, "sample_ratio", None),
+        swin_attn_weighting=bool(_get(saved, "swin_attn_weighting", False)),
     )
 
     state_dict = checkpoint.get("model", checkpoint)

@@ -17,6 +17,11 @@ wall-clock speedup, and it is why the sparsity budget is per-head rather than gl
 The first block is left dense by default: its attention is the only one operating on raw
 patch embeddings, and pruning it costs disproportionate accuracy.
 
+Nothing here is specific to global attention. Swin's window attention has the same
+``qkv``/``proj`` pair and the same per-head layout, so the masks are built identically; the
+blocks are just reached through :mod:`toast.arch`, which flattens Swin's stages into one
+globally indexed list.
+
 Masks follow the convention used throughout this repo: **True means pruned**.
 """
 
@@ -25,6 +30,7 @@ from typing import List, Sequence, Union
 import torch
 import torch.nn as nn
 
+from .arch import iter_blocks
 from .importance import head_importance
 
 __all__ = ["StructuredCoupledPruner", "reapply_masks", "attention_layers"]
@@ -33,14 +39,10 @@ __all__ = ["StructuredCoupledPruner", "reapply_masks", "attention_layers"]
 def attention_layers(model: nn.Module, skip_first_block: bool = True):
     """Yield ``(block_idx, qkv_linear, proj_linear)`` for each prunable attention block.
 
-    Blocks are visited in index order, and the two linears are yielded in the same order in
-    which :func:`reapply_masks` walks the model, so a flat mask list stays aligned.
+    Blocks are visited in global index order, and the two linears are yielded in the same
+    order in which :func:`reapply_masks` walks the model, so a flat mask list stays aligned.
     """
-    blocks = getattr(model, "blocks", None)
-    if blocks is None:
-        raise AttributeError("model has no `.blocks`; SCWP expects a ViT-style backbone")
-
-    for idx, block in enumerate(blocks):
+    for idx, block in iter_blocks(model):
         if skip_first_block and idx == 0:
             continue
         attn = getattr(block, "attn", None)
@@ -75,13 +77,14 @@ def reapply_masks(
 
 
 class StructuredCoupledPruner:
-    """Compute and apply SCWP masks for every attention block of a ViT.
+    """Compute and apply SCWP masks for every attention block of a ViT or Swin.
 
     Args:
-        model: ViT-style backbone exposing ``.blocks[i].attn.{qkv,proj}``.
+        model: a backbone whose blocks expose ``attn.{qkv,proj}`` -- a ViT's ``.blocks`` or a
+            Swin's ``.layers[i].blocks[j]``.
         head_sparsity: percentage (0-100) of each head's dimensions to drop. Either a single
-            value for all blocks, or one value per block -- in which case index 0 corresponds
-            to block 0 and is ignored when ``skip_first_block`` is set.
+            value for all blocks, or one value per block, indexed globally -- in which case
+            index 0 corresponds to block 0 and is ignored when ``skip_first_block`` is set.
         score: row score, see :data:`toast.importance.SCORES`. ``gm`` is the paper default.
         coupling: how the pair is scored, see :data:`toast.importance.COUPLINGS`.
             ``coupled`` is the paper default; the rest are ablations.
@@ -110,9 +113,10 @@ class StructuredCoupledPruner:
         self.masks: List[torch.Tensor] = []
         self._block_ids: List[int] = []
 
+        blocks = dict(iter_blocks(model))
         for idx, qkv, proj in attention_layers(model, skip_first_block):
             qkv_mask, proj_mask = self._block_masks(
-                qkv, proj, self._sparsity_for(head_sparsity, idx), self._num_heads(model, idx)
+                qkv, proj, self._sparsity_for(head_sparsity, idx), self._num_heads(blocks[idx])
             )
             self.masks += [qkv_mask, proj_mask]
             self._block_ids.append(idx)
@@ -138,10 +142,10 @@ class StructuredCoupledPruner:
         return float(head_sparsity[block_idx])
 
     @staticmethod
-    def _num_heads(model: nn.Module, block_idx: int) -> int:
-        heads = getattr(model.blocks[block_idx].attn, "num_heads", None)
+    def _num_heads(block: nn.Module) -> int:
+        heads = getattr(block.attn, "num_heads", None)
         if not heads:
-            raise AttributeError(f"block {block_idx}: attn has no `num_heads`")
+            raise AttributeError(f"{type(block).__name__}: attn has no `num_heads`")
         return int(heads)
 
     def _block_masks(self, qkv: nn.Linear, proj: nn.Linear, sparsity: float, num_heads: int):

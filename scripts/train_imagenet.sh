@@ -6,6 +6,13 @@
 #   IMAGENET=/path/to/imagenet TARGET_FLOPS=2.9 bash scripts/train_imagenet.sh
 #
 # Override anything through the environment, e.g. MODEL=deit_base_patch16_224 GPUS=8.
+# Swin backbones take the same script and the same flags:
+#
+#   IMAGENET=/path/to/imagenet MODEL=swin_small_patch4_window7_224 TARGET_FLOPS=5.4 \
+#       bash scripts/train_imagenet.sh
+#
+# A hand-written FC*_RATIOS then needs one entry per block counting through the stages --
+# 24 values for Swin-S, not four stage vectors.
 set -euo pipefail
 
 IMAGENET="${IMAGENET:?set IMAGENET to the dataset root (containing train/ and val/)}"

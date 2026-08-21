@@ -10,6 +10,10 @@ the flags, see `scripts/`.
     # fine-tune after compression, 4 GPUs
     torchrun --nproc_per_node=4 main.py --model deit_small_patch16_224 --data-path $IMAGENET \
         --weight-pruning --head-sparsity 90 --epochs 300 --output_dir ./log/deit_s_90
+
+    # Swin takes the same flags; its ratio vectors are indexed by global block
+    python main.py --eval --model swin_small_patch4_window7_224 --target-flops 5.4 \
+        --data-path $IMAGENET
 """
 
 import argparse
@@ -38,9 +42,10 @@ from toast import (
     SCORES,
     StructuredCoupledPruner,
     apply_toast,
+    num_blocks as count_blocks,
     resolve_config,
-    spec_from_model,
-    vit_flops,
+    spec_for_model,
+    toast_flops,
 )
 from utils import MultiEpochsDataLoader
 
@@ -133,8 +138,20 @@ def get_args_parser():
         "--fc2-prune-ratio", type=float, nargs="+", default=None, metavar="R",
         help="per-block fraction of fc2 input channels (hidden units) to drop",
     )
-    tcs.add_argument("--cls-weight", type=float, default=2.0, help="class-token weight in TCS scoring")
-    tcs.add_argument("--sample-ratio", type=float, default=0.02, help="fraction of patches sampled by TCS")
+    tcs.add_argument(
+        "--cls-weight", type=float, default=2.0,
+        help="class-token weight in TCS scoring; ignored on Swin, which has no class token",
+    )
+    tcs.add_argument(
+        "--sample-ratio", type=float, default=None,
+        help="fraction of tokens TCS estimates its scores from "
+        "(default: 0.02 for ViT, 0.2 for Swin)",
+    )
+    tcs.add_argument(
+        "--swin-attn-weighting", action="store_true",
+        help="Swin only: weight each token by the attention it receives, instead of scoring "
+        "on magnitude alone. Off by default -- configs/tcs.json was measured without it",
+    )
 
     # Optimiser
     parser.add_argument("--lr", type=float, default=1e-3, metavar="LR")
@@ -214,12 +231,22 @@ def load_pretrained(model, path, logger):
     state_dict = checkpoint.get("model", checkpoint)
 
     target = model.state_dict()
-    for key in ("head.weight", "head.bias", "head_dist.weight", "head_dist.bias"):
+    head_keys = tuple(
+        f"{prefix}.{suffix}"
+        for prefix in ("head", "head.fc", "head_dist")  # Swin wraps its head in ClassifierHead
+        for suffix in ("weight", "bias")
+    )
+    for key in head_keys:
         if key in state_dict and (key not in target or state_dict[key].shape != target[key].shape):
             logger.info(f"dropping {key} (shape mismatch with the target head)")
             del state_dict[key]
 
-    if "pos_embed" in state_dict and state_dict["pos_embed"].shape != target["pos_embed"].shape:
+    # Swin has no positional embedding to resize -- its relative position bias is per window.
+    if (
+        "pos_embed" in state_dict
+        and "pos_embed" in target
+        and state_dict["pos_embed"].shape != target["pos_embed"].shape
+    ):
         state_dict["pos_embed"] = _interpolate_pos_embed(model, state_dict["pos_embed"])
         logger.info(f"interpolated pos_embed to {tuple(state_dict['pos_embed'].shape)}")
 
@@ -231,9 +258,10 @@ def load_pretrained(model, path, logger):
         logger.info(f"  unexpected keys: {msg.unexpected_keys}")
 
     if any(k.startswith("head.") for k in msg.missing_keys):
-        torch.nn.init.trunc_normal_(model.head.weight, std=0.02)
-        torch.nn.init.zeros_(model.head.bias)
-        logger.info(f"re-initialised head for {model.head.out_features} classes")
+        classifier = model.get_classifier() if hasattr(model, "get_classifier") else model.head
+        torch.nn.init.trunc_normal_(classifier.weight, std=0.02)
+        torch.nn.init.zeros_(classifier.bias)
+        logger.info(f"re-initialised head for {classifier.out_features} classes")
 
     return checkpoint
 
@@ -387,7 +415,9 @@ def main(args):
     if args.pretrained:
         load_pretrained(model, args.pretrained, logger)
 
-    num_blocks = len(model.blocks)
+    # For Swin this counts through the stages, so a schedule is one flat per-block vector
+    # whichever backbone it is for.
+    num_blocks = count_blocks(model)
     apply_schedule_config(args, num_blocks, logger)
 
     fc1_ratios = resolve_ratios(args.fc1_prune_ratio, num_blocks, "fc1-prune-ratio")
@@ -398,9 +428,9 @@ def main(args):
     )
 
     if args.print_flops:
-        spec = spec_from_model(model, num_classes=args.nb_classes)
-        baseline = vit_flops(spec)
-        compressed = vit_flops(
+        spec = spec_for_model(model, num_classes=args.nb_classes)
+        baseline = toast_flops(spec)
+        compressed = toast_flops(
             spec,
             head_sparsity=head_sparsity if args.weight_pruning else None,
             fc1_prune_ratios=fc1_ratios,
@@ -417,6 +447,7 @@ def main(args):
         fc2_prune_ratios=fc2_ratios,
         cls_weight=args.cls_weight,
         sample_ratio=args.sample_ratio,
+        swin_attn_weighting=args.swin_attn_weighting,
     )
     if any(fc1_ratios) or any(fc2_ratios):
         logger.info(f"TCS fc1 ratios: {fc1_ratios}")

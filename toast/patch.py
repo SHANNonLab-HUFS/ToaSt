@@ -1,5 +1,8 @@
 """Patch a timm VisionTransformer to run Token Channel Selection in its FFN blocks.
 
+Handed a Swin backbone instead, `apply_toast` forwards to :mod:`toast.swin`, which does the
+same job against Swin's stage-nested blocks and its class-token-free scoring.
+
 `apply_toast` swaps the class of each `Block` and `Attention` in place, so the model keeps its
 parameter names and any checkpoint stays loadable. Two things change:
 
@@ -13,12 +16,14 @@ measurement the same selection is realised as physically smaller matmuls -- see
 :mod:`toast.dense`.
 """
 
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple, Union
 
 import torch
-import torch.nn as nn
+from timm.models.swin_transformer import SwinTransformer
 from timm.models.vision_transformer import Attention, Block, VisionTransformer
 
+from .arch import is_swin, part as _part
+from .swin import DEFAULT_SWIN_SAMPLE_RATIO, apply_toast_swin
 from .token_channel import (
     DEFAULT_CLS_WEIGHT,
     DEFAULT_SAMPLE_RATIO,
@@ -26,22 +31,6 @@ from .token_channel import (
 )
 
 __all__ = ["apply_toast", "ToastBlock", "ToastAttention"]
-
-_IDENTITY = nn.Identity()
-
-
-def _part(module: nn.Module, *names: str) -> nn.Module:
-    """First attribute of `module` present among `names`, else a shared Identity.
-
-    timm renamed several block internals across versions (`drop_path` became
-    `drop_path1`/`drop_path2`, `Mlp.drop` became `drop1`/`drop2`, LayerScale `ls1`/`ls2`
-    appeared). Resolving by name keeps one implementation working across them.
-    """
-    for name in names:
-        part = getattr(module, name, None)
-        if part is not None:
-            return part
-    return _IDENTITY
 
 
 class ToastAttention(Attention):
@@ -155,22 +144,40 @@ def apply_toast(
     fc1_prune_ratios: Optional[Sequence[float]] = None,
     fc2_prune_ratios: Optional[Sequence[float]] = None,
     cls_weight: float = DEFAULT_CLS_WEIGHT,
-    sample_ratio: float = DEFAULT_SAMPLE_RATIO,
+    sample_ratio: Optional[float] = None,
     generator: Optional[torch.Generator] = None,
-) -> VisionTransformer:
+    swin_attn_weighting: bool = False,
+) -> Union[VisionTransformer, SwinTransformer]:
     """Enable Token Channel Selection on `model`, in place.
 
     Args:
-        model: a timm VisionTransformer (DeiT included).
+        model: a timm VisionTransformer (DeiT included), or a SwinTransformer, which is
+            forwarded to :func:`toast.swin.apply_toast_swin`.
         fc1_prune_ratios: per-block fraction of `fc1` *input* channels to drop, indexed by
             block. ``None`` means no pruning anywhere.
         fc2_prune_ratios: per-block fraction of `fc2` input channels (i.e. hidden units) to
             drop.
-        cls_weight, sample_ratio, generator: forwarded to
-            :func:`toast.token_channel.channel_importance`.
+        cls_weight: class-token weight in the score. Swin has no class token, so it is
+            ignored there.
+        sample_ratio: fraction of tokens the score is estimated from. ``None`` takes the
+            default for the architecture -- 2 % for ViT, 20 % for Swin's smaller stages.
+        generator: RNG for that subsample; pass one for reproducible selections.
+        swin_attn_weighting: Swin only -- weight tokens by the attention they receive rather
+            than scoring on magnitude alone. See :func:`toast.swin.apply_toast_swin`.
 
     Returns the same model object.
     """
+    if is_swin(model):
+        return apply_toast_swin(
+            model,
+            fc1_prune_ratios=fc1_prune_ratios,
+            fc2_prune_ratios=fc2_prune_ratios,
+            sample_ratio=DEFAULT_SWIN_SAMPLE_RATIO if sample_ratio is None else sample_ratio,
+            generator=generator,
+            attn_weighting=swin_attn_weighting,
+        )
+
+    sample_ratio = DEFAULT_SAMPLE_RATIO if sample_ratio is None else sample_ratio
     blocks: List[Block] = list(model.blocks)
     n = len(blocks)
     fc1 = list(fc1_prune_ratios) if fc1_prune_ratios is not None else [0.0] * n

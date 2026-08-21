@@ -8,7 +8,8 @@
     "fc1": "per-block fraction of fc1 input channels dropped; index 0 = first block",
     "fc2": "per-block fraction of fc2 input channels (MLP hidden units) dropped",
     "reported": "the paper's measured numbers for this schedule",
-    "computed_gflops": "FLOPs derived from this schedule by toast/flops.py"
+    "computed_gflops": "FLOPs derived from this schedule by toast/flops.py",
+    "fc1_by_stage": "the same fc1 vector split by Swin stage, for readability; concatenating the stages reproduces fc1"
   },
   "models": {
     "deit_tiny_patch16_224": {
@@ -1228,14 +1229,14 @@
         2
       ],
       "num_blocks": 12,
-      "supported": false,
-      "unsupported_reason": "apply_toast patches timm VisionTransformer blocks; Swin's SwinTransformerBlock is not handled in this release. These schedules are recorded so the paper's Swin rows are documented.",
+      "supported": true,
       "baseline": {
         "top1": 81.2,
         "top5": 95.5,
         "gflops": 4.5,
         "latency_ms": 49.02,
-        "throughput_img_s": 2610.94
+        "throughput_img_s": 2610.94,
+        "computed_gflops": 4.491
       },
       "references": [],
       "configs": {
@@ -1315,6 +1316,7 @@
             0.9,
             0.9
           ],
+          "computed_gflops": 2.937,
           "reported": {
             "top1": 81.76,
             "top5": 95.7,
@@ -1338,14 +1340,14 @@
         2
       ],
       "num_blocks": 24,
-      "supported": false,
-      "unsupported_reason": "apply_toast patches timm VisionTransformer blocks; Swin's SwinTransformerBlock is not handled in this release. These schedules are recorded so the paper's Swin rows are documented.",
+      "supported": true,
       "baseline": {
         "top1": 83.2,
         "top5": 96.2,
         "gflops": 8.7,
         "latency_ms": 83.42,
-        "throughput_img_s": 1534.41
+        "throughput_img_s": 1534.41,
+        "computed_gflops": 8.741
       },
       "references": [
         {
@@ -1483,6 +1485,7 @@
             0.9,
             0.9
           ],
+          "computed_gflops": 5.388,
           "reported": {
             "top1": 84.65,
             "top5": 96.8,
@@ -1506,14 +1509,14 @@
         2
       ],
       "num_blocks": 24,
-      "supported": false,
-      "unsupported_reason": "apply_toast patches timm VisionTransformer blocks; Swin's SwinTransformerBlock is not handled in this release. These schedules are recorded so the paper's Swin rows are documented.",
+      "supported": true,
       "baseline": {
         "top1": 83.5,
         "top5": 96.5,
         "gflops": 15.4,
         "latency_ms": 116.35,
-        "throughput_img_s": 1100.1
+        "throughput_img_s": 1100.1,
+        "computed_gflops": 15.431
       },
       "references": [
         {
@@ -1651,6 +1654,7 @@
             0.9,
             0.9
           ],
+          "computed_gflops": 8.81,
           "reported": {
             "top1": 85.21,
             "top5": 96.5,
@@ -1665,7 +1669,7 @@
   },
   "detection": {
     "framework": "Cascade Mask R-CNN on COCO",
-    "note": "Swin backbones; recorded for reference, not runnable from this release.",
+    "note": "Swin backbones; the classification schedules above are runnable, the detection pipeline itself is not part of this release.",
     "entries": [
       {
         "backbone": "swin_small_patch4_window7_224",

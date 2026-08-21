@@ -25,6 +25,12 @@ negligible against the matmul it shrinks.
 The two compose: SCWP fixes a sparse attention structure offline, TCS narrows the FFN at run
 time, and `toast.dense` re-packs the result so the savings show up in wall-clock time.
 
+Both stages run on plain ViTs (DeiT, MAE) and on Swin. Nothing in SCWP cares whether attention
+is global or windowed, and the feed-forward half is the same either way; what differs is that
+Swin nests its blocks in stages and has no class token. [`toast/arch.py`](toast/arch.py)
+flattens the nesting, so a schedule is one per-block vector for either backbone, and
+[`toast/swin.py`](toast/swin.py) holds the rest — see [Swin](#swin) below.
+
 ## Install
 
 ```bash
@@ -72,6 +78,17 @@ Or set everything by hand and skip the config:
 python main.py --eval --model deit_small_patch16_224 --data-path /path/to/imagenet \
     --weight-pruning --head-sparsity 90 \
     --fc2-prune-ratio 0 0 0 0 0 0 0 0 0 0 0.9 0.9
+```
+
+Swin takes the same flags:
+
+```bash
+python main.py --eval --model swin_small_patch4_window7_224 --target-flops 5.4 \
+    --data-path /path/to/imagenet
+
+# the same schedule, scoring channels by attention received rather than magnitude
+python main.py --eval --model swin_small_patch4_window7_224 --target-flops 5.4 \
+    --data-path /path/to/imagenet --swin-attn-weighting
 ```
 
 Compress and fine-tune on ImageNet:
@@ -185,9 +202,13 @@ Larger backbones reach their compressed accuracy in fewer fine-tuning epochs (29
 | Swin-B | baseline | 51.9 | 45.0 |
 | Swin-B | **ToaST** | **52.2** | 44.7 |
 
-The Swin schedules are recorded in the config with their per-stage ratio vectors. Running them
-needs a Swin backbone patch, which this release does not include -- `apply_toast` targets timm
-`VisionTransformer` blocks.
+The Swin schedules are in the config as flat per-block vectors, alongside `fc1_by_stage` /
+`fc2_by_stage`, which are the same numbers grouped by stage for reading. Run them exactly like
+the DeiT ones — `--target-flops 5.4 --model swin_small_patch4_window7_224` — or through
+`scripts/train_imagenet.sh` with `MODEL=` set.
+
+The COCO rows above used the same schedules on a detection backbone; that pipeline is a
+separate codebase and is not part of this release.
 
 ## FLOPs
 
@@ -198,9 +219,13 @@ multiplier on the MHSA term and TCS as one on the FFN term; the module docstring
 ```bash
 python -m toast.flops --model deit_base_patch16_224 --head-sparsity 90 \
     --fc2-prune-ratio 0 0 0 0 0 0 0 0 0 0 0.7 0.9
+python -m toast.flops --model swin_small_patch4_window7_224 --head-sparsity 90
 ```
 
-`main.py` logs the same breakdown at startup.
+`main.py` logs the same breakdown at startup. Swin is counted per stage, since each has its own
+token count and width, with windowed attention costing `2*N*window_area*C` instead of
+`2*N^2*C`, and the patch-merging linears counted separately — `swin_flops` reproduces the
+published 4.5 / 8.7 / 15.4 GFLOPs baselines to the decimal they are quoted at.
 
 ## Implementation notes
 
@@ -216,6 +241,35 @@ take accuracy from the masked path and latency from the dense one --
 masks before measuring, and `model_best.pth` is written after that projection, so released
 weights are exactly sparse and re-pack cleanly. `--mask-every-step` projects after every
 optimiser step as well.
+
+<a id="swin"></a>
+**Swin.** Blocks are indexed globally, counting through the stages, so Swin-T takes a
+twelve-element ratio vector exactly as DeiT-T does and `--head-sparsity`'s per-block form lines
+up the same way. Block 0 — the first block of the first stage — is the one left dense.
+[`toast/swin.py`](toast/swin.py) subclasses timm's `SwinTransformerBlock` and overrides only the
+feed-forward half, so window shifting, padding and the attention mask stay timm's code and keep
+working across its versions; `toast.dense` swaps in a re-packed window attention the same way.
+
+The score is where Swin genuinely differs. A ViT weights each patch by the class token's
+attention to it — one row of the map. A window map has no distinguished row, so there are two
+candidate substitutes, and only one of them carries information:
+
+- **each token's mean attention over its window** — i.e. averaging the map along its key axis.
+  Softmax normalises exactly that axis, so this is `1 / window_area` for every token alike. A
+  constant cannot reorder anything: weighting by it selects precisely the channels magnitude
+  alone selects.
+- **the attention each token receives** — averaging along the query axis instead. This does
+  vary between tokens, and is the real analogue of the ViT weighting.
+
+The default is magnitude alone, which is what the schedules in `configs/tcs.json` were measured
+with. `--swin-attn-weighting` switches to attention-received; it needs the map, so it installs a
+non-fused `SwinToastWindowAttention` on the blocks that select channels. Mapping the weights
+back from window order to image order (window reverse, crop, un-shift) is part of that path and
+is not optional — window order is not image order, and a weight that lands on the wrong token is
+worse than no weight at all.
+
+Consequently `--cls-weight` has no effect on Swin, and `--sample-ratio` defaults to 0.2 there
+against 0.02 for ViT.
 
 ## Citation
 
